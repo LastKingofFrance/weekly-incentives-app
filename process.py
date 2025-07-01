@@ -75,12 +75,9 @@ def calculate_agent_rewards(nbt_df, master_df):
 def get_agency_target_and_reward(agency_name):
     if not isinstance(agency_name, str):
         return (np.nan, np.nan)
-
     agency_upper = agency_name.upper().strip()
-
     if agency_upper == "MANAGERS2":
         return (np.nan, np.nan)
-
     if any(code in agency_upper for code in ["NAIROBI 1", "NAIROBI 2", "NAIROBI 5"]):
         return (2200000, 10000)
     elif any(code in agency_upper for code in ["NAIROBI 3", "NAIROBI 6", "NAIROBI 7"]):
@@ -89,7 +86,20 @@ def get_agency_target_and_reward(agency_name):
         return (1100000, 6000)
     elif "NAIROBI" not in agency_upper:
         return (550000, 4000)
+    return (np.nan, np.nan)
 
+# 🔧 NEW FUNCTION for Unit Leader thresholds
+def get_unit_leader_target_and_reward(agency_name):
+    if not isinstance(agency_name, str):
+        return (np.nan, np.nan)
+    agency_upper = agency_name.upper().strip()
+    if "MERU" in agency_upper or "NANYUKI" in agency_upper or "KITUI" in agency_upper or "EMBU" in agency_upper:
+        return (100000, 2000)
+    elif "MOMBASA" in agency_upper or "NAKURU" in agency_upper or "KISII" in agency_upper or \
+         "THIKA" in agency_upper or "ELDORET" in agency_upper or "KISUMU" in agency_upper:
+        return (250000, 4000)
+    elif "NAIROBI" in agency_upper:
+        return (500000, 6000)
     return (np.nan, np.nan)
 
 def calculate_unit_leader_rewards(nbt_df, agency_unit_file, active_agents_file):
@@ -107,10 +117,13 @@ def calculate_unit_leader_rewards(nbt_df, agency_unit_file, active_agents_file):
     agents_df = agents_df[['Agent Code', 'Unit Code', 'Agency']]
     agents_df.columns = ['LevelCode', 'UnitCode', 'Agency']
     agents_df['LevelCode'] = agents_df['LevelCode'].str.strip().str.zfill(8)
+
     merged = nbt_df.merge(agents_df, on='LevelCode', how='inner')
     unit_agg = merged.groupby(['UnitCode', 'Agency']).agg(AchievedAPI=('EstimatedAPI', 'sum')).reset_index()
     full_df = unit_agg.merge(unit_df, on='UnitCode', how='inner')
-    full_df[['WeeklyTarget', 'BaseReward']] = full_df['Agency'].apply(lambda x: pd.Series(get_agency_target_and_reward(x)))
+
+    # ✅ Use the Unit Leader-specific reward logic
+    full_df[['WeeklyTarget', 'BaseReward']] = full_df['Agency'].apply(lambda x: pd.Series(get_unit_leader_target_and_reward(x)))
     full_df['Percentage'] = (full_df['AchievedAPI'] / full_df['WeeklyTarget']).round(2)
     full_df['Reward'] = full_df.apply(lambda row: row['BaseReward'] if row['Percentage'] >= 0.9 and row['AchievedAPI'] >= row['WeeklyTarget'] else 0, axis=1)
     return full_df[['UnitCode', 'Leader', 'Agency', 'WeeklyTarget', 'AchievedAPI', 'Percentage', 'Reward']] \
